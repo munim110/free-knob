@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freeknob"
+version = "0.1.0"
+description = "Matched calibration audits for pool-and-threshold comparisons"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Md Tanveer Hossain Munim"},
+  {name = "Bijoy Ahmed Saiem"},
+  {name = "Al-Amin Sany"},
+  {name = "Tanzima Hashem"},
+]
+dependencies = ["numpy>=1.24"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/munim110/free-knob"
+
+[project.optional-dependencies]
+parity = ["h5py>=3.8"]
+
+[project.scripts]
+freeknob-audit = "freeknob.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["freeknob*"]

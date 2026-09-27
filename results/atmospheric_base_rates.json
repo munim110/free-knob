@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "event_definition": "target_brightness_temperature_k <= threshold_k",
+  "evaluation_shape": [
+    256,
+    256
+  ],
+  "eventful_filter": {
+    "field": "evaluation_footprint_observed_coverage_percent",
+    "operator": ">",
+    "value": 0.1
+  },
+  "definitions": {
+    "paper_R": "test/evaluation_footprint/all_frames",
+    "selection_rule_D_climatology": "train/evaluation_footprint/eventful_frames"
+  },
+  "splits": {
+    "train": {
+      "first_timestamp": "20150717_0600",
+      "last_timestamp": "20211114_1800",
+      "full_grid_shape": [
+        351,
+        251
+      ],
+      "evaluation_valid_shape": [
+        256,
+        251
+      ],
+      "thresholds": {
+        "220": {
+          "full_grid_all_frames": 0.1875068954949433,
+          "evaluation_footprint_all_frames": 0.19029003776560424,
+          "evaluation_footprint_eventful_frames": 0.2600667943261124,
+          "n_frames": 1200,
+          "n_eventful_frames": 878
+        },
+        "215": {
+          "full_grid_all_frames": 0.1156172177387317,
+          "evaluation_footprint_all_frames": 0.11694597910441568,
+          "evaluation_footprint_eventful_frames": 0.1696724287854627,
+          "n_frames": 1200,
+          "n_eventful_frames": 827
+        },
+        "210": {
+          "full_grid_all_frames": 0.06629167092314503,
+          "evaluation_footprint_all_frames": 0.06678996254565073,
+          "evaluation_footprint_eventful_frames": 0.10557965765396911,
+          "n_frames": 1200,
+          "n_eventful_frames": 759
+        },
+        "205": {
+          "full_grid_all_frames": 0.032260823751527605,
+          "evaluation_footprint_all_frames": 0.032811721862549804,
+          "evaluation_footprint_eventful_frames": 0.061475946798742534,
+          "n_frames": 1200,
+          "n_eventful_frames": 640
+        },
+        "200": {
+          "full_grid_all_frames": 0.01235638642013144,
+          "evaluation_footprint_all_frames": 0.012454128797310757,
+          "evaluation_footprint_eventful_frames": 0.0328921963910363,
+          "n_frames": 1200,
+          "n_eventful_frames": 453
+        },
+        "197": {
+          "full_grid_all_frames": 0.00509909081622229,
+          "evaluation_footprint_all_frames": 0.0050465974643094285,
+          "evaluation_footprint_eventful_frames": 0.02036499130596259,
+          "n_frames": 1200,
+          "n_eventful_frames": 295
+        }
+      }
+    },
+    "val": {
+      "first_timestamp": "20211115_0600",
+      "last_timestamp": "20230319_0600",
+      "full_grid_shape": [
+        351,
+        251
+      ],
+      "evaluation_valid_shape": [
+        256,
+        251
+      ],
+      "thresholds": {
+        "220": {
+          "full_grid_all_frames": 0.1395228960700408,
+          "evaluation_footprint_all_frames": 0.1445287599601594,
+          "evaluation_footprint_eventful_frames": 0.23822344550369953,
+          "n_frames": 150,
+          "n_eventful_frames": 91
+        },
+        "215": {
+          "full_grid_all_frames": 0.07910088042890169,
+          "evaluation_footprint_all_frames": 0.08296044986719787,
+          "evaluation_footprint_eventful_frames": 0.15171535656155866,
+          "n_frames": 150,
+          "n_eventful_frames": 82
+        },
+        "210": {
+          "full_grid_all_frames": 0.04247844330181648,
+          "evaluation_footprint_all_frames": 0.04444731490703851,
+          "evaluation_footprint_eventful_frames": 0.09128703507886264,
+          "n_frames": 150,
+          "n_eventful_frames": 73
+        },
+        "205": {
+          "full_grid_all_frames": 0.01827712890129889,
+          "evaluation_footprint_all_frames": 0.0186187541500664,
+          "evaluation_footprint_eventful_frames": 0.05163287820938467,
+          "n_frames": 150,
+          "n_eventful_frames": 54
+        },
+        "200": {
+          "full_grid_all_frames": 0.005164754089056879,
+          "evaluation_footprint_all_frames": 0.004972402058432935,
+          "evaluation_footprint_eventful_frames": 0.021129766647694937,
+          "n_frames": 150,
+          "n_eventful_frames": 35
+        },
+        "197": {
+          "full_grid_all_frames": 0.0014748981282845825,
+          "evaluation_footprint_all_frames": 0.0013553079349269588,
+          "evaluation_footprint_eventful_frames": 0.013924213858850315,
+          "n_frames": 150,
+          "n_eventful_frames": 14
+        }
+      }
+    },
+    "test": {
+      "first_timestamp": "20230319_1200",
+      "last_timestamp": "20231217_0600",
+      "full_grid_shape": [
+        351,
+        251
+      ],
+      "evaluation_valid_shape": [
+        256,
+        251
+      ],
+      "thresholds": {
+        "220": {
+          "full_grid_all_frames": 0.19621547996049987,
+          "evaluation_footprint_all_frames": 0.2026969206507304,
+          "evaluation_footprint_eventful_frames": 0.25985228423911194,
+          "n_frames": 150,
+          "n_eventful_frames": 117
+        },
+        "215": {
+          "full_grid_all_frames": 0.11258744698319731,
+          "evaluation_footprint_all_frames": 0.11537329847277557,
+          "evaluation_footprint_eventful_frames": 0.16171397936292212,
+          "n_frames": 150,
+          "n_eventful_frames": 107
+        },
+        "210": {
+          "full_grid_all_frames": 0.06262948207171315,
+          "evaluation_footprint_all_frames": 0.06377707918326692,
+          "evaluation_footprint_eventful_frames": 0.09564367529880478,
+          "n_frames": 150,
+          "n_eventful_frames": 100
+        },
+        "205": {
+          "full_grid_all_frames": 0.030893103748349436,
+          "evaluation_footprint_all_frames": 0.031237446049136787,
+          "evaluation_footprint_eventful_frames": 0.05319506774040204,
+          "n_frames": 150,
+          "n_eventful_frames": 88
+        },
+        "200": {
+          "full_grid_all_frames": 0.00879990011464115,
+          "evaluation_footprint_all_frames": 0.008836217629482073,
+          "evaluation_footprint_eventful_frames": 0.027907982431974235,
+          "n_frames": 150,
+          "n_eventful_frames": 47
+        },
+        "197": {
+          "full_grid_all_frames": 0.00277991547579861,
+          "evaluation_footprint_all_frames": 0.002644526062416999,
+          "evaluation_footprint_eventful_frames": 0.01636163678618858,
+          "n_frames": 150,
+          "n_eventful_frames": 24
+        }
+      }
+    }
+  }
+}

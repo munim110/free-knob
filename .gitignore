@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+# Cached model predictions are large and regenerable from Tier 2 of REPRODUCE.md.
+results/*.h5
+.pytest_cache/
+generated/

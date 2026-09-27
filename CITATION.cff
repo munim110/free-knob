@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this code or the FreeKnob Audit, please cite the paper."
+title: "A Free Knob: Decoupling Calibration and Predictive Skill in Threshold-Based Evaluation"
+type: software
+license: MIT
+repository-code: "https://github.com/munim110/free-knob"
+authors:
+  - family-names: Munim
+    given-names: Md Tanveer Hossain
+    affiliation: "Regional Integrated Multi-Hazard Early Warning System (RIMES); Bangladesh University of Engineering and Technology"
+  - family-names: Saiem
+    given-names: Bijoy Ahmed
+    affiliation: "Bangladesh University of Engineering and Technology"
+  - family-names: Sany
+    given-names: Al-Amin
+    affiliation: "Bangladesh University of Engineering and Technology"
+  - family-names: Hashem
+    given-names: Tanzima
+    affiliation: "Bangladesh University of Engineering and Technology"

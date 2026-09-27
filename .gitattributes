@@ -1,0 +1,8 @@
+# Source and docs are stored with LF line endings.
+* text=auto eol=lf
+# Released artefacts are stored byte-exact so their MANIFEST.md hashes hold on
+# every platform.
+results/** -text
+*.pdf binary
+*.npz binary
+*.h5 binary

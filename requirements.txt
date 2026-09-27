@@ -1,0 +1,16 @@
+# Tier 1: rebuild the manuscript numbers and figures from the cached artefacts.
+numpy>=1.24
+matplotlib==3.11.1      # other versions shift figure layout by a pixel or two
+
+# Tier 2: rerun each analysis from the shipped intermediates. No GPU, no
+# training. Uncomment alongside the Tier 1 lines above.
+# scipy>=1.10
+
+# Tier 3: regenerate the intermediates from raw data and released checkpoints.
+# torch>=2.0
+# h5py>=3.8
+# omegaconf>=2.3
+# pycocotools>=2.0
+# joblib>=1.2             # < 1.2 cannot read the atmospheric normalisation stats
+# pysteps>=1.7
+# opencv-python>=4.7      # required by pysteps for Lucas-Kanade
