@@ -1,9 +1,12 @@
 # A Free Knob: Decoupling Calibration and Predictive Skill in Threshold-Based Evaluation
 
+[![arXiv](https://img.shields.io/badge/arXiv-2609.33457-b31b1b.svg)](https://arxiv.org/abs/2609.33457)
+
 Code and result artefacts for the paper by Md Tanveer Hossain Munim, Bijoy Ahmed
-Saiem, Al-Amin Sany and Tanzima Hashem. Every number, table and figure in the
-paper is generated from the files in this repository by the scripts in this
-repository; none is typed by hand.
+Saiem, Al-Amin Sany and Tanzima Hashem
+([arXiv:2609.33457](https://arxiv.org/abs/2609.33457)). Every number, table and
+figure in the paper is generated from the files in this repository by the scripts
+in this repository; none is typed by hand.
 
 ## What the paper claims
 
@@ -240,11 +243,16 @@ If you use this code or the FreeKnob Audit, please cite the paper:
 
 ```bibtex
 @misc{munim2026freeknob,
-  title  = {A Free Knob: Decoupling Calibration and Predictive Skill in
-            Threshold-Based Evaluation},
-  author = {Munim, Md Tanveer Hossain and Saiem, Bijoy Ahmed and
-            Sany, Al-Amin and Hashem, Tanzima},
-  year   = {2026}
+  title         = {A Free Knob: Decoupling Calibration and Predictive Skill
+                   in Threshold-Based Evaluation},
+  author        = {Munim, Md Tanveer Hossain and Saiem, Bijoy Ahmed and
+                   Sany, Al-Amin and Hashem, Tanzima},
+  year          = {2026},
+  eprint        = {2609.33457},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+  doi           = {10.48550/arXiv.2609.33457},
+  url           = {https://arxiv.org/abs/2609.33457}
 }
 ```
 

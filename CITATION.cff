@@ -17,3 +17,19 @@ authors:
   - family-names: Hashem
     given-names: Tanzima
     affiliation: "Bangladesh University of Engineering and Technology"
+preferred-citation:
+  type: article
+  title: "A Free Knob: Decoupling Calibration and Predictive Skill in Threshold-Based Evaluation"
+  authors:
+    - family-names: Munim
+      given-names: Md Tanveer Hossain
+    - family-names: Saiem
+      given-names: Bijoy Ahmed
+    - family-names: Sany
+      given-names: Al-Amin
+    - family-names: Hashem
+      given-names: Tanzima
+  year: 2026
+  journal: "arXiv preprint arXiv:2609.33457"
+  doi: "10.48550/arXiv.2609.33457"
+  url: "https://arxiv.org/abs/2609.33457"
