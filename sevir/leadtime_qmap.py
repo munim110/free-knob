@@ -2,8 +2,8 @@
 
 Section 9 records the per-horizon map as "the natural next tightening" and
 asserts it "can only lower the residual, never raise it". That is an in-sample
-argument. The per-lead-time family strictly contains the global one -- setting
-all twelve maps equal recovers it -- so on the calibration half it must match the
+argument. The per-lead-time family strictly contains the global one, since setting
+all twelve maps equal recovers it. So on the calibration half it must match the
 observed marginal at least as well. Out of sample it need not: each of the twelve
 maps is fitted on a twelfth of the pixels, and the upper percentiles that decide
 a tau=219 cell are estimated from a twelfth as many exceedances.
@@ -24,7 +24,7 @@ Scoring is unchanged from pooling_control.py: pool, threshold, accumulate the
 contingency table over events AND lead times, so the cell is the one the paper
 quotes. A per-lead map can reorder a pixel at lead 3 against one at lead 9, but
 never two pixels within a frame, and pooling is spatial while the tables are
-summed across frames -- so no scored quantity sees the cross-frame reordering,
+summed across frames. So no scored quantity sees the cross-frame reordering,
 and the transform is exactly as free as the global one at these cells.
 """
 import argparse

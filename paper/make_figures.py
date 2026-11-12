@@ -25,12 +25,14 @@ import json
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt          # noqa: E402
-import numpy as np                       # noqa: E402
 
+matplotlib.use("Agg")
 import sys as _sys
 from pathlib import Path as _Path
+
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "tools"))
 import paths as P
 
@@ -182,9 +184,9 @@ def decomposition():
             [D[(pl, t)]["csi_qmap_global"], C[(pl, t)]["csi_qmap_global"]])
 
     panels = [
-        ("(a) One architecture, two released checkpoints", same,
+        ("(a) Two released checkpoints of one architecture", same,
          ["EarthFormer release", "CasCast backbone"], ["#f1a340", "#d73027"]),
-        ("(b) A published gain: cascade against its backbone", casc,
+        ("(b) CasCast cascade and its backbone", casc,
          ["CasCast backbone", "CasCast cascade"], ["#d73027", "#762a83"]),
     ]
 
@@ -227,13 +229,30 @@ def decomposition():
 
 def contrasts():
     """The pairwise-contrast result: (a) calibration gap against distortion,
-    (b) raw against calibrated contrast, sign reversals marked in both."""
-    f = RES / "sevir_published_contrasts.json"
+    (b) raw against calibrated contrast, sign reversals marked in both.
+
+    FIG_CONTROL selects the control. "exact" (the default, for the revision)
+    uses the post-pooling threshold on the rerun of the six systems;
+    "paper" redraws the submitted figure from the paper's own control.
+    """
+    import os
+    control = os.environ.get("FIG_CONTROL", "exact")
+    if control == "paper":
+        f = RES / "sevir_published_contrasts.json"
+    else:
+        f = RES / "revision" / "postpool" / "sevir_postpool_contrasts.json"
     if not f.exists():
-        print("  (contrast figure skipped: sevir_published_contrasts.json missing)")
+        print(f"  (contrast figure skipped: {f.name} missing)")
         return
     d = json.loads(f.read_text())
     rows, st = d["rows"], d["stats"]
+    if control != "paper":
+        rows = [{"devgap": r["devgap"], "raw": r["raw"],
+                 "distort": r["distort_post_exact"],
+                 "cal": r["cal_post_exact"],
+                 "flip": r["flip_post_exact"]} for r in d["rows"]]
+        st = {"all": {"pearson": st["all"]["post_exact"]["pearson"],
+                      "n": st["all"]["n"]}}
     keep = [r for r in rows if not r["flip"]]
     flip = [r for r in rows if r["flip"]]
 
@@ -275,7 +294,8 @@ def contrasts():
         metadata={"Creator": "freeknob",
                   "Producer": "Matplotlib", "CreationDate": None},
     )
-    print(f"  wrote fig_contrasts.pdf ({len(flip)} of {len(rows)} reversed)")
+    print(f"  wrote fig_contrasts.pdf, {control} control "
+          f"({len(flip)} of {len(rows)} reversed, r={st['all']['pearson']:+.3f})")
 
 
 if __name__ == "__main__":

@@ -14,3 +14,11 @@ matplotlib==3.11.1      # other versions shift figure layout by a pixel or two
 # joblib>=1.2             # < 1.2 cannot read the atmospheric normalisation stats
 # pysteps>=1.7
 # opencv-python>=4.7      # required by pysteps for Lucas-Kanade
+
+# Tier 3, precipitation audits in nwp/ (no GPU).
+# xarray>=2023.1
+# zarr>=2.14
+# gcsfs>=2023.1
+# pandas>=1.5
+# eccodes>=1.6
+# numcodecs>=0.11

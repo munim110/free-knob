@@ -2,8 +2,8 @@
 
 Their evaluation never re-runs the deterministic backbone: it reads a cached
 `encode(EarthFormer(x)).sample()` per sample. Decoding those latents therefore
-gives their backbone's field as their cascade actually sees it -- a VAE round
-trip of it, which is exactly the quantity their own `latent_compress_model`
+gives their backbone's field as their cascade actually sees it: a VAE round
+trip of it, which is the quantity their own `latent_compress_model`
 scores when it builds the cache.
 
 This is the backbone half of the split question, and it costs one decoder pass

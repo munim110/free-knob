@@ -9,6 +9,7 @@ import numpy as np
 
 from freeknob import (
     contingency_score,
+    exact_pooled_threshold,
     fit_quantile_map,
     free_knob_audit,
     spatial_pool,
@@ -337,6 +338,118 @@ class AuditTests(unittest.TestCase):
             )
             self.assertEqual(run.returncode, 2)
             self.assertIn("missing NPZ arrays", run.stderr)
+
+
+class ExactControlTests(unittest.TestCase):
+    def setUp(self):
+        rng = np.random.default_rng(3)
+        self.obs_cal = rng.gamma(0.6, 30.0, size=(6, 16, 16))
+        self.obs_test = rng.gamma(0.6, 30.0, size=(6, 16, 16))
+        self.pred_cal = {"low": 0.4 * self.obs_cal ** 1.1,
+                         "high": 1.5 * self.obs_cal + 5.0}
+        self.pred_test = {"low": 0.4 * self.obs_test ** 1.1,
+                          "high": 1.5 * self.obs_test + 5.0}
+
+    def test_threshold_matches_observed_exceedance_count(self):
+        pred = np.arange(10.0)
+        obs = np.array([0, 0, 0, 0, 0, 0, 0, 5, 5, 5], dtype=float)
+        cut = exact_pooled_threshold(pred, obs, 5.0)
+        self.assertEqual(cut, 7.0)
+        self.assertEqual(np.count_nonzero(pred >= cut), 3)
+
+    def test_threshold_is_infinite_without_observed_events(self):
+        cut = exact_pooled_threshold(np.arange(4.0), np.zeros(4), 1.0)
+        self.assertEqual(cut, float("inf"))
+
+    def test_threshold_uses_pooled_values(self):
+        pred = np.array([[[0.0, 4.0], [0.0, 0.0]]])
+        obs = np.array([[[1.0, 1.0], [1.0, 1.0]]])
+        self.assertEqual(
+            exact_pooled_threshold(pred, obs, 1.0, pooling="mean", block_size=2),
+            1.0,
+        )
+
+    def test_exact_control_is_one_threshold_on_pooled_raw_values(self):
+        for pooling, threshold in (("mean", 20.0), ("max", 80.0)):
+            report = free_knob_audit(
+                self.pred_cal, self.obs_cal, self.pred_test, self.obs_test,
+                threshold=threshold, pooling=pooling, block_size=4,
+                control="exact",
+            )
+            self.assertEqual(report.control, "exact")
+            self.assertEqual(report.calibrators, {})
+            for name, pred in self.pred_test.items():
+                cut = report.forecast_thresholds[name]
+                pooled = spatial_pool(pred, pooling, 4)
+                obs = spatial_pool(self.obs_test, pooling, 4)
+                positive = pooled >= cut
+                event = obs >= threshold
+                self.assertGreater(np.count_nonzero(event), 0)
+                score = report.arms[name].calibrated
+                self.assertEqual(score.hits, int(np.count_nonzero(positive & event)))
+                self.assertEqual(score.false_alarms,
+                                 int(np.count_nonzero(positive & ~event)))
+                self.assertEqual(score.misses,
+                                 int(np.count_nonzero(~positive & event)))
+
+    def test_exact_control_removes_calibration_split_bias(self):
+        report = free_knob_audit(
+            self.pred_cal, self.obs_cal, self.pred_cal, self.obs_cal,
+            threshold=20.0, pooling="mean", block_size=4, control="exact",
+        )
+        for audit in report.arms.values():
+            self.assertGreater(audit.calibrated.hits + audit.calibrated.misses, 0)
+            self.assertAlmostEqual(audit.calibrated.frequency_bias, 1.0)
+
+    def test_controls_agree_without_pooling_on_continuous_data(self):
+        kwargs = dict(threshold=40.0, n_quantiles=4097)
+        pre = free_knob_audit(self.pred_cal, self.obs_cal, self.pred_test,
+                              self.obs_test, **kwargs)
+        exact = free_knob_audit(self.pred_cal, self.obs_cal, self.pred_test,
+                                self.obs_test, control="exact", **kwargs)
+        for name in self.pred_test:
+            self.assertAlmostEqual(pre.arms[name].calibrated.csi,
+                                   exact.arms[name].calibrated.csi, places=2)
+
+    def test_report_serializes_control_and_thresholds(self):
+        report = free_knob_audit(
+            self.pred_cal, self.obs_cal, self.pred_test, self.obs_test,
+            threshold=40.0, control="exact",
+        )
+        result = report.to_dict()
+        self.assertEqual(result["control"], "exact")
+        self.assertEqual(set(result["forecast_thresholds"]), {"low", "high"})
+        json.dumps(result)
+        pre = free_knob_audit(
+            self.pred_cal, self.obs_cal, self.pred_test, self.obs_test,
+            threshold=40.0,
+        ).to_dict()
+        self.assertEqual(pre["control"], "pre")
+        self.assertNotIn("forecast_thresholds", pre)
+
+    def test_unknown_control_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "control"):
+            free_knob_audit(
+                self.pred_cal, self.obs_cal, self.pred_test, self.obs_test,
+                threshold=40.0, control="post",
+            )
+
+    def test_cli_accepts_the_exact_control(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audit.npz"
+            arrays = {"obs_calibration": self.obs_cal, "obs_test": self.obs_test}
+            for name in self.pred_cal:
+                arrays[f"{name}__calibration"] = self.pred_cal[name]
+                arrays[f"{name}__test"] = self.pred_test[name]
+            np.savez(path, **arrays)
+            run = subprocess.run(
+                [sys.executable, "-m", "freeknob", str(path), "--threshold", "20",
+                 "--pooling", "mean", "--block-size", "4", "--control", "exact"],
+                check=True, capture_output=True, text=True,
+            )
+            output = json.loads(run.stdout)
+            self.assertEqual(output["control"], "exact")
+            self.assertIn("forecast_thresholds", output)
 
 
 if __name__ == "__main__":

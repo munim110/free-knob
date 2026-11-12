@@ -1,9 +1,9 @@
 """Four selection rules for the knob, at the SEVIR cells the headlines are quoted at.
 
 Appendix L asks this on crowd density and never carried it to SEVIR. Appendix O
-measured a per-horizon transform under one rule -- carry each lead's forecast
-marginal onto that lead's observed marginal -- and found it erases less than the
-global map. Both gaps are the same missing experiment: the knob's payoff is a
+measured a per-horizon transform under one rule, which carries each lead's
+forecast marginal onto that lead's observed marginal, and found it erases less
+than the global map. Both gaps are the same missing experiment: the knob's payoff is a
 function of how the knob is *chosen*, and the paper reports one choice.
 
 This crosses the two axes in a single accumulation.

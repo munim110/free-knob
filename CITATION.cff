@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this code or the FreeKnob Audit, please cite the paper."
-title: "A Free Knob: Decoupling Calibration and Predictive Skill in Threshold-Based Evaluation"
+title: "A Free Knob: A Sensitivity Audit for Calibration in Threshold-Based Evaluation"
 type: software
 license: MIT
 repository-code: "https://github.com/munim110/free-knob"
@@ -19,7 +19,7 @@ authors:
     affiliation: "Bangladesh University of Engineering and Technology"
 preferred-citation:
   type: article
-  title: "A Free Knob: Decoupling Calibration and Predictive Skill in Threshold-Based Evaluation"
+  title: "A Free Knob: A Sensitivity Audit for Calibration in Threshold-Based Evaluation"
   authors:
     - family-names: Munim
       given-names: Md Tanveer Hossain

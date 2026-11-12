@@ -34,6 +34,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pooling", choices=("none", "mean", "max"),
                         default="none")
     parser.add_argument("--block-size", type=int, default=1)
+    parser.add_argument(
+        "--control", choices=("pre", "exact"), default="pre",
+        help=("pre: quantile map fitted on raw values and applied before "
+              "pooling (the paper's main control); exact: map fitted on "
+              "pooled values, i.e. one forecast threshold per arm"),
+    )
     parser.add_argument("--n-quantiles", type=int, default=1001)
     parser.add_argument("--max-fit-samples", type=int, default=60_000_000)
     parser.add_argument("--seed", type=int, default=0)
@@ -70,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
                 n_quantiles=args.n_quantiles,
                 max_fit_samples=args.max_fit_samples,
                 seed=args.seed,
+                control=args.control,
             )
         text = report.to_json(
             args.output, include_calibrators=args.include_calibrators

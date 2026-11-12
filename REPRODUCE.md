@@ -56,7 +56,7 @@ official SEVIR test HDF5 and cached deterministic prediction at the paths below:
 This is CPU-only. It reads evaluation events in bounded batches and checks all
 five pooling conventions at all six thresholds against the shipped paper
 artefact. The shipped parity record passes all 30 cells at absolute tolerance
-`1e-7`; the accompanying fast unit/API/CLI suite has 26 tests.
+`1e-7`; the accompanying fast unit/API/CLI suite has 37 tests.
 
 ---
 
@@ -76,19 +76,27 @@ reports any macro the manuscript references but no artefact supports.
 Expected output includes:
 
 ```
-  E1: 6 rarity levels, rho=-1.000
-  E6: gain range -8.8% (avg16) to +79.7% (max16)
+  E1: 6 rarity levels, rho=-1.000, 4 zero-CSI runs excluded from the relative column
+  E6: gain range -8.9% (avg16) to +79.8% (max16)
   dose: rho=0.675 over 30 arm-threshold points at max16, 0.599 over all 150 cells
-  E8: reported +109.1%, residual after global qmap +12.9% (share 88%)
+  E8: reported +109.1\%, residual after global qmap +12.9\% (share 88\%)
   repro: worst deviation 2.8%
   contrasts: 450 cells over 15 pairs, r=+0.884 (max16), 51 flips (23 substantive)
   crowdpool: rho=0.568 over 320 trained cells, 5 seeds
   segpool: 20 classes / 5000 images; rho(rarity)=-0.019 PREDICTION FAILED
-  ets: erased share at 219 is 88% under ETS against 88% under CSI; largest gap
-       over thresholds 5 points
   bootstrap: cascade+cal - det+cal at 219 = +0.0340 [+0.0234, +0.0439]
-  wrote numbers.tex with 284 macros
+  exact control: r=0.896 rho=0.860, 64 flips (46 separated)
+  diffcast: max16 +82.9\% -> +5.0\%; 16/28 flips (10 separated)
+  prediff: 0 flips in 29 cells; largest move 0.020
+  transfer: D = 0.0015 + 0.086 g; PreDiff inside 100\%, DiffCast rho 0.92
+  wb2: 360 contrasts, r=0.817 rho=0.871, 49 flips (41 separated)
+  ecmwf: 270 contrasts, r=0.679 rho=0.213, 9 flips (6 separated)
+  crowd post-sum: rho=0.593 over 320 cells; patch sums only 0.573 over 70
+  wrote numbers.tex with 544 macros
 ```
+
+The lines above are shortened; the script prints a few more fields on some of
+them.
 
 Every rank correlation above is Spearman's rho with tied ranks averaged
 (`tools/stats.py`). An earlier version ranked with `argsort(argsort(x))`, which
@@ -158,6 +166,22 @@ The last one reuses the shipped per-event count cache, so it needs no prediction
 HDF5s and takes seconds rather than the half hour the cache itself costs to
 build. All eight have been verified to reproduce their shipped artefacts exactly.
 
+Five more reports cover the exact control and the independently released
+systems. Each reads its intermediates from `results/revision/`:
+
+```
+python sevir/sevir_postpool_contrasts.py
+python sevir/sevir_postpool_report.py
+python sevir/sevir_transfer_test.py
+python nwp/wb2_precip_report.py
+python nwp/aifs_precip_report.py
+```
+
+All five reproduce their shipped files. On Windows they write CRLF line
+endings, so compare with line endings ignored (`diff --strip-trailing-cr`). In
+`wb2_contrasts.json`, seven calibration gaps can differ in the 17th significant
+digit, from floating-point summation order.
+
 ---
 
 ## Tier 3: raw data to artefacts
@@ -175,6 +199,12 @@ build. All eight have been verified to reproduce their shipped artefacts exactly
 | RYDL radar archive `RYDL.hdf5` | `RADAR_H5` | |
 | preprocessed atmospheric fields, per band | `ATMOS_DATA` | |
 | SEVIR nowcast training split and its META csv | `SEVIR_DATA` | 30 GB |
+| PaddleScience EarthFormer weights `earthformer_sevir.pdparams` | `BASELINES_DIR` | |
+| DiffCast repository and `diffcast_phydnet_sevir128.pt` | `--repo`, `--ckpt` | |
+| SEVIR VIL archive for DiffCast's own loader | `--data` | |
+| PreDiff repository, its SEVIR-LR weights and SEVIR-LR | `--repo` | |
+| WeatherBench 2 zarr stores | `gs://weatherbench2`, read anonymously | |
+| ECMWF open data and ARCO-ERA5 | public Google Cloud buckets, read over HTTPS | 16 GB on disk |
 
 The training split is needed only for the validation-window control of Stage 2c.
 Both it and the test split come from `s3://sevir/data/processed/` with
@@ -344,8 +374,8 @@ Appendix M's macros will show as placeholders.
 The two budgets are the point. Under `matched` every map is fitted from the same
 calibration events, so a per-horizon map sees a twelfth of the pixels; under
 `equal` each is given as many pixels as the global map. The global map is fitted
-from a fixed event sample in both, so its column is identical across them --- if
-a rerun moves the global column between budgets, the event sampling has drifted
+from a fixed event sample in both, so its column is identical across them. If a
+rerun moves the global column between budgets, the event sampling has drifted
 and the comparison is void.
 
 ### Stage 2e: knob family against selection rule
@@ -369,7 +399,7 @@ Both selection rules see the calibration half only, so neither is an oracle; the
 `csi_oracle` column is the best evaluation-half score over the family and is
 printed to bound what the rules leave behind, not as a result. The check that the
 harness is sound is that pooled-horizon selection by bias reproduces the per-cell
-knob of Section 6 to four figures --- if it does not, the knob family or the
+knob of Section 6 to four figures. If it does not, the knob family or the
 calibration split has drifted.
 
 ### Stage 3: SEVIR analysis
@@ -596,6 +626,82 @@ python crowd/calibration_control.py --outputs-dir <crowd runs> --seeds 42,43,44,
 
 Repeat the atmospheric command for each threshold in
 {220, 215, 210, 205, 200, 197}. Then rerun the Tier 2 reports.
+
+### Stage 8: the exact control and the independently released systems
+
+The six SEVIR arms are rerun first, with the Stage 1 commands. EarthFormer is
+loaded from PaddleScience's copy of its weights, because the official URL now
+returns an error:
+
+```
+python sevir/convert_paddle_earthformer.py \
+    --pd $BASELINES_DIR/earthformer_sevir.pdparams \
+    --out $BASELINES_DIR/earthformer_sevir_from_paddle.pt
+python sevir/infer_earthformer.py \
+    --ckpt $BASELINES_DIR/earthformer_sevir_from_paddle.pt \
+    --out results/sevir_pred_earthformer.h5
+```
+
+The converter reads the pickle with an unpickler that admits only numpy arrays,
+and refuses to write unless every PyTorch key matches in shape. The Stage 2
+command with `--out results/revision/sevir_rerun/sevir_poolingq_<arm>_rerun.json`
+writes the reproduction check. The cascade arms move by up to 0.017 CSI between
+runs, because diffusion sampling is stochastic.
+
+The exact control and its event-bootstrap intervals:
+
+```
+python sevir/sevir_pool_then_calibrate.py \
+    --arm persistence=results/sevir_pred_persistence.h5 \
+    --arm pysteps=results/sevir_pred_pysteps.h5 \
+    --arm earthformer=results/sevir_pred_earthformer.h5 \
+    --arm cascast_det=results/sevir_pred_cascast_det.h5 \
+    --arm cascast_cascade=results/sevir_pred_cascast_cascade.h5 \
+    --arm cascast_cascade_cfg1=results/sevir_pred_cascast_cascade_cfg1.h5
+python sevir/sevir_postpool_certify.py
+```
+
+Both are CPU only. The first recomputes the paper's control in the same pass and
+checks it against `results/sevir_poolingq_<arm>.json`. The second checks that its
+per-event counts sum to the stored totals.
+
+DiffCast and PreDiff, from their authors' weights. Each needs its authors'
+repository; PreDiff also needs the links listed in the docstring of
+`sevir/infer_prediff.py`:
+
+```
+python sevir/infer_diffcast.py --out results/diffcast_sevir128.h5
+python sevir/score_sevir_audit.py diffcast results/diffcast_sevir128.h5
+
+python sevir/infer_prediff.py --out results/prediff_sevirlr.h5
+python sevir/score_sevir_audit.py prediff results/prediff_sevirlr.h5
+```
+
+DiffCast samples with 250 DDIM steps and PreDiff with the full 1000-step sampler,
+so PreDiff is the slowest run in this stage. Both write to
+`results/revision/<system>/`.
+
+The crowd exact control reads the Stage 7 checkpoints and checks the raw scores
+against `results/crowd_pooling_s<seed>.json` first:
+
+```
+CROWD_DATA=<ShanghaiTech Part A> CROWD_OUTPUTS=<crowd runs> \
+    python crowd/crowd_pool_then_calibrate.py --seeds 42,43,44,45,46
+```
+
+The precipitation audits run no model. WeatherBench 2 forecasts are read from
+the public zarr stores; ECMWF forecasts are fetched as single GRIB messages from
+the open-data mirror, with ERA5 truth from ARCO-ERA5:
+
+```
+python nwp/wb2_precip_audit.py
+
+python nwp/aifs_fetch_tp.py --out $AIFS_TP
+python nwp/aifs_precip_audit.py --src $AIFS_TP
+```
+
+`aifs_fetch_tp.py` writes five arrays of about 3.2 GB each. Then rerun the
+Tier 2 reports above.
 
 ---
 

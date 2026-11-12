@@ -93,6 +93,8 @@ class AuditReport:
     arms: dict[str, ArmAudit]
     pairs: list[PairAudit]
     calibrators: dict[str, QuantileMap] = field(repr=False)
+    control: str = "pre"
+    forecast_thresholds: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self, include_calibrators: bool = False) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -100,9 +102,12 @@ class AuditReport:
             "threshold": self.threshold,
             "pooling": self.pooling,
             "block_size": self.block_size,
+            "control": self.control,
             "arms": {name: asdict(audit) for name, audit in self.arms.items()},
             "pairs": [asdict(pair) for pair in self.pairs],
         }
+        if self.control == "exact":
+            result["forecast_thresholds"] = dict(self.forecast_thresholds)
         if include_calibrators:
             result["calibrators"] = {
                 name: calibrator.to_dict()
@@ -237,6 +242,31 @@ def threshold_pool_score(predictions: ArrayLike, observations: ArrayLike,
     return contingency_score(pred, obs, threshold)
 
 
+def exact_pooled_threshold(predictions: ArrayLike, observations: ArrayLike,
+                           threshold: float, *, pooling: str = "none",
+                           block_size: int = 1) -> float:
+    """Forecast threshold for the exact control, fitted on calibration data.
+
+    This is the exact empirical quantile map from pooled forecast values onto
+    pooled observed values, evaluated at ``threshold``: the k-th largest pooled
+    forecast value, where k is the number of observed pooled values at or above
+    ``threshold``. A forecast block is positive when its pooled value is at or
+    above the returned threshold. The map acts after pooling, so it cannot
+    reorder blocks. It returns ``inf`` when no observed block is an event.
+    """
+    pred = spatial_pool(predictions, pooling, block_size).reshape(-1)
+    obs = spatial_pool(observations, pooling, block_size).reshape(-1)
+    pred = pred[np.isfinite(pred)]
+    obs = obs[np.isfinite(obs)]
+    if pred.size == 0 or obs.size == 0:
+        raise ValueError("calibration arrays must contain at least one finite value")
+    k = int(np.count_nonzero(obs >= threshold))
+    if k == 0:
+        return math.inf
+    k = min(k, pred.size)
+    return float(np.partition(pred, pred.size - k)[pred.size - k])
+
+
 def free_knob_audit(
     predictions_calibration: Mapping[str, ArrayLike],
     observations_calibration: ArrayLike,
@@ -249,6 +279,7 @@ def free_knob_audit(
     n_quantiles: int = 1001,
     max_fit_samples: Optional[int] = 60_000_000,
     seed: int = 0,
+    control: str = "pre",
 ) -> AuditReport:
     """Run the matched-arm, disjoint-split FreeKnob Audit.
 
@@ -257,7 +288,15 @@ def free_knob_audit(
     prediction mappings. Pair signs follow the paper: for pair (A, B), contrast
     is CSI(B)-CSI(A), distortion is raw-calibrated, and calibration gap is
     dev(A)-dev(B), where dev is absolute log frequency bias.
+
+    ``control="pre"`` is the paper's main control: one quantile map per arm,
+    fitted on raw values and applied before pooling. ``control="exact"`` fits
+    the map on pooled values instead (see :func:`exact_pooled_threshold`), so
+    it is exactly one forecast threshold per arm. With no pooling the two
+    controls agree up to the map's knot interpolation.
     """
+    if control not in {"pre", "exact"}:
+        raise ValueError("control must be 'pre' or 'exact'")
     calibration_names = list(predictions_calibration)
     test_names = list(predictions_test)
     if not calibration_names:
@@ -268,6 +307,7 @@ def free_knob_audit(
     obs_cal = np.asarray(observations_calibration)
     obs_test = np.asarray(observations_test)
     calibrators: dict[str, QuantileMap] = {}
+    forecast_thresholds: dict[str, float] = {}
     arms: dict[str, ArmAudit] = {}
     for name in calibration_names:
         pred_cal = np.asarray(predictions_calibration[name])
@@ -282,22 +322,41 @@ def free_knob_audit(
                 f"test shape for {name!r} is {pred_test.shape}; "
                 f"expected {obs_test.shape}"
             )
-        calibrator = fit_quantile_map(
-            pred_cal,
-            obs_cal,
-            n_quantiles=n_quantiles,
-            max_samples=max_fit_samples,
-            seed=seed,
-        )
         raw = threshold_pool_score(
             pred_test, obs_test, threshold, pooling=pooling,
             block_size=block_size
         )
-        calibrated = threshold_pool_score(
-            calibrator(pred_test), obs_test, threshold, pooling=pooling,
-            block_size=block_size
-        )
-        calibrators[name] = calibrator
+        if control == "pre":
+            calibrator = fit_quantile_map(
+                pred_cal,
+                obs_cal,
+                n_quantiles=n_quantiles,
+                max_samples=max_fit_samples,
+                seed=seed,
+            )
+            calibrated = threshold_pool_score(
+                calibrator(pred_test), obs_test, threshold, pooling=pooling,
+                block_size=block_size
+            )
+            calibrators[name] = calibrator
+        else:
+            cut = exact_pooled_threshold(
+                pred_cal, obs_cal, threshold, pooling=pooling,
+                block_size=block_size
+            )
+            pooled_test = spatial_pool(pred_test, pooling, block_size)
+            pooled_obs = spatial_pool(obs_test, pooling, block_size)
+            if not (np.isfinite(pooled_test).all()
+                    and np.isfinite(pooled_obs).all()):
+                raise ValueError("evaluation arrays must contain only finite values")
+            # Score the binary fields: forecast events at the fitted cut,
+            # observed events at the evaluation threshold.
+            calibrated = contingency_score(
+                (pooled_test >= cut).astype(np.float64),
+                (pooled_obs >= threshold).astype(np.float64),
+                0.5,
+            )
+            forecast_thresholds[name] = cut
         arms[name] = ArmAudit(raw, calibrated, calibrated.csi - raw.csi)
 
     pairs = []
@@ -326,4 +385,6 @@ def free_knob_audit(
         arms=arms,
         pairs=pairs,
         calibrators=calibrators,
+        control=control,
+        forecast_thresholds=forecast_thresholds,
     )

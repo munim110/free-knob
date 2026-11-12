@@ -11,7 +11,7 @@ not redistributed because of their size and upstream terms.
 3. Inspect `results/freeknob_parity_cascast_det.json` for the full SEVIR parity
    record and `MANIFEST.md` for result-level provenance.
 
-The verification script runs 28 fast tests (26 for the audit package and 2 for
+The verification script runs 37 fast tests (35 for the audit package and 2 for
 the atmospheric base rates), checks every result hash, regenerates all
 numerical LaTeX fragments and figures in a temporary directory, and compares
 every numerical fragment byte-for-byte, ignoring line endings, with
@@ -30,8 +30,10 @@ python -m unittest discover -s tests -p "test_*.py"
 `freeknob.free_knob_audit` applies one matched calibration instrument to every
 arm using a caller-supplied calibration split, evaluates the fixed instruments
 on a disjoint split, and reports frequency bias plus raw and calibrated pairwise
-contrasts. The real-data parity harness is CPU-only but requires the external
-SEVIR test HDF5 and cached prediction HDF5 documented in `REPRODUCE.md`.
+contrasts. With `control="exact"` the map is fitted after pooling, so each arm
+gets one forecast threshold on pooled block values. The real-data parity harness
+is CPU-only but requires the external SEVIR test HDF5 and cached prediction HDF5
+documented in `REPRODUCE.md`.
 
 ## Full reproduction
 

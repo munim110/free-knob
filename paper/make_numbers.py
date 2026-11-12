@@ -626,13 +626,30 @@ def crowdpool():
     # which is diluted: the constructed controls are 800 of the cells and sit in
     # a tie at exactly zero gain, which Spearman resolves by giving every member
     # of the tie the same averaged rank.
+    trained_rows = [r for d in runs for r in d["table"]
+                    if r["usable"] and r["arm"] in ("baseline", "csrnet")
+                    and all(np.isfinite(r[k]) for k in ("bias_uncal",
+                                                        "csi_percell",
+                                                        "csi_uncal"))]
     trained = [(r["bias_uncal"], r["csi_percell"] - r["csi_uncal"])
-               for d in runs for r in d["table"]
-               if r["usable"] and r["arm"] in ("baseline", "csrnet")
-               and all(np.isfinite(r[k]) for k in ("bias_uncal", "csi_percell",
-                                                   "csi_uncal"))]
+               for r in trained_rows]
     mac("CrowdRho", f"{rho(trained):.3f}")
     mac("CrowdN", str(len(trained)))
+
+    # A monotone map applied before the patch sum can reorder patches. Three
+    # members of the family cannot: the identity, a positive gain (every patch
+    # sum scales by one factor) and a positive shift (predictions are clipped
+    # at zero, so every patch sum moves by the same amount). The quantile map
+    # and a negative shift, which clips, can. Count the selected maps of each
+    # kind and repeat the statistic on the cells where no reordering is
+    # possible.
+    kept = [(r["bias_uncal"], r["csi_percell"] - r["csi_uncal"])
+            for r in trained_rows
+            if r["knob_percell"] != "qmap"
+            and not r["knob_percell"].startswith("shift=-")]
+    mac("CrowdOrdN", str(len(kept)))
+    mac("CrowdOrdOther", str(len(trained) - len(kept)))
+    mac("CrowdOrdRho", f"{rho(kept):.3f}")
     mac("CrowdRhoAll", f"{rho(cells):.3f}")
     mac("CrowdNAll", str(len(cells)))
     mac("CrowdSeeds", str(len(runs)))
@@ -1415,12 +1432,435 @@ def knobsevir():
     (OUT / "tab_knobsevir.tex").write_text("\n".join(body) + "\n")
 
 
+# =====================================================================
+# Revision additions (November 2026). Everything below reads the result
+# files produced during the discussion period, kept in results/revision/.
+# The functions above are unchanged, so every macro of the submitted
+# version keeps its value; these only add macros and tables.
+# =====================================================================
+RB = RES / "revision"
+NUM = {16: "Sixteen", 74: "SeventyFour", 133: "OneThirtyThree",
+       160: "OneSixty", 181: "OneEightyOne", 219: "TwoNineteen"}
+FAMILY = {"none": "max", "max4": "max", "max16": "max",
+          "avg4": "avg", "avg16": "avg"}
+
+
+def f3(x):
+    return f"{x:.3f}"
+
+
+def s4(x):
+    return f"{x:+.4f}"
+
+
+def ci(lo, hi):
+    return f"[{lo:+.4f}, {hi:+.4f}]"
+
+
+def sep(c):
+    """True when a 95% interval excludes zero."""
+    return c[0] > 0 or c[1] < 0
+
+
+def corr(x, y):
+    import numpy as np
+    return float(np.corrcoef(x, y)[0, 1]), spearman(x, y)
+
+
+def _taavg(table, arm, pool, kind):
+    """Threshold-averaged CSI, the convention DiffCast and PreDiff report."""
+    import numpy as np
+    return float(np.mean([r[f"csi_{kind}"] for r in table
+                          if r["arm"] == arm and r["pooling"] == pool]))
+
+
+def paper_families():
+    """The paper's own control, split by pooling family.
+
+    Under no pooling and max pooling the pre-pooling map is exactly a
+    per-system threshold; under average pooling it is not. The split shows
+    where the paper's reversal count comes from.
+    """
+    rows = json.loads((RES / "sevir_published_contrasts.json")
+                      .read_text())["rows"]
+    for fam, tag in (("max", "Max"), ("avg", "Avg")):
+        sub = [r for r in rows if FAMILY[r["pooling"]] == fam]
+        r_, rho = corr([r["devgap"] for r in sub], [r["distort"] for r in sub])
+        mac(f"PaperFam{tag}N", str(len(sub)))
+        mac(f"PaperFam{tag}R", f3(r_))
+        mac(f"PaperFam{tag}Rho", f3(rho))
+        mac(f"PaperFam{tag}Flips", str(sum(r["flip"] for r in sub)))
+    print(f"  paper control by family: max/none r={macros['PaperFamMaxR']} "
+          f"{macros['PaperFamMaxFlips']} flips; avg r={macros['PaperFamAvgR']} "
+          f"{macros['PaperFamAvgFlips']} flips")
+
+
+def exact():
+    """The exact post-pooling threshold control on the six SEVIR systems."""
+    d = json.loads((RB / "postpool" / "sevir_postpool_contrasts.json")
+                   .read_text())
+    st = d["stats"]
+    # The rerun from released checkpoints, scored with the paper's own
+    # (pre-pooling) control: the reproduction check.
+    mac("RerunR", f3(st["all"]["pre"]["pearson"]))
+    mac("RerunRho", f3(st["all"]["pre"]["spearman"]))
+    mac("RerunFlips", str(st["all"]["pre"]["flips"]))
+    for key, tag in (("all", ""), ("max or none", "Max"), ("avg only", "Avg"),
+                     ("max16", "MaxSixteen"), ("published", "Pub")):
+        e = st[key]["post_exact"]
+        mac(f"Exact{tag}N", str(st[key]["n"]))
+        mac(f"Exact{tag}R", f3(e["pearson"]))
+        mac(f"Exact{tag}Rho", f3(e["spearman"]))
+        mac(f"Exact{tag}Flips", str(e["flips"]))
+
+    c = json.loads((RB / "postpool" / "sevir_postpool_certified.json")
+                   .read_text())
+    mac("ExactSep", str(c["summary"]["n_both_separated"]))
+    mac("ExactBoot", str(c["B"]))
+    mac("ExactNEval", str(c["n_eval"]))
+    rows = c["rows"]
+
+    def get(a, b, pl, t):
+        return next(r for r in rows if (r["a"], r["b"], r["pooling"],
+                                        r["threshold"]) == (a, b, pl, t))
+
+    tables = {}
+
+    def csi(arm, pl, t, kind):
+        if arm not in tables:
+            f = RB / "postpool" / f"sevir_postpool_{arm}.json"
+            tables[arm] = json.loads(f.read_text())["table"]
+        return next(r[f"csi_{kind}"] for r in tables[arm]
+                    if (r["pooling"], r["threshold"]) == (pl, t))
+
+    # CasCast reference cell: cascade minus backbone, max 16x16, tau 219.
+    a, b = "cascast_det", "cascast_cascade"
+    r = get(a, b, "max16", 219)
+    mac("ExactRefRaw", s4(r["raw"]))
+    mac("ExactRefRawCI", ci(*r["raw_ci"]))
+    mac("ExactRefCal", s4(r["cal"]))
+    mac("ExactRefCalCI", ci(*r["cal_ci"]))
+    mac("ExactRefRemoved", f"{100 * (r['raw'] - r['cal']) / r['raw']:.0f}\\%")
+    rel = {}
+    for kind, tag in (("raw", "Raw"), ("post_exact", "Cal")):
+        ca, cb = csi(a, "max16", 219, kind), csi(b, "max16", 219, kind)
+        mac(f"ExactRef{tag}CsiA", f"{ca:.4f}")
+        mac(f"ExactRef{tag}CsiB", f"{cb:.4f}")
+        rel[tag] = (cb - ca) / ca
+        mac(f"ExactRef{tag}Rel", pct(rel[tag]))
+    # Share of the raw relative gain removed. EightShareQ and EightShareK use
+    # this basis, so the three controls can be quoted as one range.
+    # ExactRefRemoved above is the share of the absolute CSI difference.
+    mac("ExactRefShare",
+        f"{100 * (1 - rel['Cal'] / rel['Raw']):.0f}\\%")
+
+    # Same pair across thresholds. Columns: tau, raw [CI], calibrated [CI],
+    # share of the raw margin removed.
+    body, shares = [], []
+    for t in THRESHOLDS[1:]:
+        r = get(a, b, "max16", t)
+        sh = (r["raw"] - r["cal"]) / r["raw"]
+        if t >= 160:
+            shares.append(sh)
+        mac(f"ExactCasc{NUM[t]}Raw", s4(r["raw"]))
+        mac(f"ExactCasc{NUM[t]}Cal", s4(r["cal"]))
+        mac(f"ExactCasc{NUM[t]}CalCI", ci(*r["cal_ci"]))
+        mac(f"ExactCasc{NUM[t]}Removed", f"{100 * sh:.0f}\\%")
+        body.append(f"{t} & {s4(r['raw'])} {ci(*r['raw_ci'])} & "
+                    f"{s4(r['cal'])} {ci(*r['cal_ci'])} & "
+                    f"{100 * sh:.0f}\\% \\\\")
+    (OUT / "tab_exact_cascast.tex").write_text("\n".join(body) + "\n")
+    mac("ExactRemovedLo", f"{100 * min(shares):.0f}\\%")
+    mac("ExactRemovedHi", f"{100 * max(shares):.0f}\\%")
+
+    # Cascade against EarthFormer (a published pair).
+    r = get("earthformer", b, "max16", 219)
+    mac("ExactEFCascRaw", s4(r["raw"]))
+    mac("ExactEFCascCal", s4(r["cal"]))
+    mac("ExactEFCascCalCI", ci(*r["cal_ci"]))
+
+    # Same architecture: CasCast backbone minus EarthFormer under the exact
+    # control. tab_samearch_exact.tex has the columns of tab_samearch.tex, so
+    # it can replace it; tab_samearch_exact_ci.tex adds the intervals.
+    body, body_ci, fl = [], [], 0
+    for t in THRESHOLDS:
+        r = get("earthformer", a, "max16", t)
+        ra = csi("earthformer", "max16", t, "raw")
+        ea = csi("earthformer", "max16", t, "post_exact")
+        fl += r["flip"]
+        body.append(f"{t} & {r['bias_a']:.3f} & {r['bias_b']:.3f} & "
+                    f"{s4(r['raw'])} & {s4(r['cal'])} & "
+                    f"{pct(r['raw'] / ra)} & {pct(r['cal'] / ea)} \\\\")
+        body_ci.append(f"{t} & {r['bias_a']:.2f} / {r['bias_b']:.2f} & "
+                       f"{s4(r['raw'])} {ci(*r['raw_ci'])} & "
+                       f"{s4(r['cal'])} {ci(*r['cal_ci'])} \\\\")
+    (OUT / "tab_samearch_exact.tex").write_text("\n".join(body) + "\n")
+    (OUT / "tab_samearch_exact_ci.tex").write_text("\n".join(body_ci) + "\n")
+    mac("SameArchExactFlips", str(fl))
+    mac("SameArchExactN", str(len(THRESHOLDS)))
+
+    # Average pooling: the pre-pooling map puts the cascade ahead at these
+    # two thresholds; the exact threshold does not.
+    for t in (160, 181):
+        r = next(x for x in d["rows"] if (x["a"], x["b"], x["pooling"],
+                                          x["threshold"]) == (a, b, "avg16", t))
+        mac(f"AvgCasc{NUM[t]}Raw", s4(r["raw"]))
+        mac(f"AvgCasc{NUM[t]}Pre", s4(r["cal_pre"]))
+        mac(f"AvgCasc{NUM[t]}Exact", s4(r["cal_post_exact"]))
+    print(f"  exact control: r={macros['ExactR']} rho={macros['ExactRho']}, "
+          f"{macros['ExactFlips']} flips ({macros['ExactSep']} separated); "
+          f"reference cell {macros['ExactRefRaw']} -> {macros['ExactRefCal']}"
+          f" ({macros['ExactRefRemoved']} removed)")
+
+
+def diffcast():
+    """DiffCast (CVPR 2024) against its PhyDNet backbone on SEVIR-128."""
+    d = json.loads((RB / "diffcast" / "diffcast_table.json").read_text())
+    T, C = d["table"], d["contrasts"]
+    for pool, tag in (("none", "None"), ("max4", "MaxFour"),
+                      ("max16", "MaxSixteen")):
+        for kind, k in (("raw_eval", "Raw"), ("cal_eval", "Cal")):
+            ca = _taavg(T, "backbone", pool, kind)
+            cb = _taavg(T, "diffcast", pool, kind)
+            mac(f"DC{tag}{k}Rel", pct(cb / ca - 1))
+            if pool == "max16":
+                mac(f"DC{tag}{k}CsiA", f"{ca:.4f}")
+                mac(f"DC{tag}{k}CsiB", f"{cb:.4f}")
+    # Reproduction check. Published values are typed from the DiffCast paper
+    # (SEVIR, CSI averaged over the six thresholds).
+    pub = {"none": 0.2757, "max4": 0.3797, "max16": 0.5296}
+    gaps = []
+    for pool, tag in (("none", "None"), ("max4", "MaxFour"),
+                      ("max16", "MaxSixteen")):
+        ours = _taavg(T, "diffcast", pool, "raw_all")
+        mac(f"DCRepro{tag}", f"{ours:.4f}")
+        mac(f"DCPub{tag}", f"{pub[pool]:.4f}")
+        gaps.append(pub[pool] - ours)
+    mac("DCReproGapLo", f"{min(gaps):.3f}")
+    mac("DCReproGapHi", f"{max(gaps):.3f}")
+
+    pair = [r for r in C if (r["a"], r["b"]) == ("backbone", "diffcast")]
+    live = [r for r in pair if abs(r["raw"]) > 1e-9 or abs(r["cal"]) > 1e-9]
+    fl = [r for r in live if r["flip"]]
+    mac("DCN", str(len(pair)))
+    mac("DCNLive", str(len(live)))
+    mac("DCFlips", str(len(fl)))
+    mac("DCFlipsSep", str(sum(sep(r["raw_ci"]) and sep(r["cal_ci"])
+                              for r in fl)))
+    # Columns: tau, bias backbone, bias DiffCast, raw, calibrated [CI], removed.
+    body, sh = [], []
+    for t in (133, 160, 181, 219):
+        r = next(x for x in pair if (x["pooling"], x["threshold"])
+                 == ("max16", t))
+        s = (r["raw"] - r["cal"]) / r["raw"]
+        sh.append(s)
+        body.append(f"{t} & {r['bias_a']:.2f} & {r['bias_b']:.2f} & "
+                    f"{s4(r['raw'])} & {s4(r['cal'])} {ci(*r['cal_ci'])} & "
+                    f"{100 * s:.0f}\\% \\\\")
+    (OUT / "tab_diffcast.tex").write_text("\n".join(body) + "\n")
+    mac("DCRemovedLo", f"{100 * min(sh):.0f}\\%")
+    mac("DCRemovedHi", f"{100 * max(sh):.0f}\\%")
+    print(f"  diffcast: max16 {macros['DCMaxSixteenRawRel']} -> "
+          f"{macros['DCMaxSixteenCalRel']}; {macros['DCFlips']}/"
+          f"{macros['DCNLive']} flips ({macros['DCFlipsSep']} separated); "
+          f"removed {macros['DCRemovedLo']}-{macros['DCRemovedHi']}")
+
+
+def prediff():
+    """PreDiff (NeurIPS 2023) against persistence on SEVIR-LR."""
+    import statistics
+    d = json.loads((RB / "prediff" / "prediff_table.json").read_text())
+    T, C = d["table"], d["contrasts"]
+    for pool, tag in (("none", "None"), ("max4", "MaxFour"),
+                      ("max16", "MaxSixteen"), ("avg4", "AvgFour"),
+                      ("avg16", "AvgSixteen")):
+        for kind, k in (("raw_eval", "Raw"), ("cal_eval", "Cal")):
+            ca = _taavg(T, "persistence", pool, kind)
+            cb = _taavg(T, "prediff", pool, kind)
+            mac(f"PD{tag}{k}Rel", pct(cb / ca - 1))
+    # Published values typed from the PreDiff paper (SEVIR-LR).
+    pub = {"none": 0.4100, "max4": 0.4624, "max16": 0.6244}
+    for pool, tag in (("none", "None"), ("max4", "MaxFour"),
+                      ("max16", "MaxSixteen")):
+        mac(f"PDRepro{tag}", f"{_taavg(T, 'prediff', pool, 'raw_all'):.4f}")
+        mac(f"PDPub{tag}", f"{pub[pool]:.4f}")
+    live = [r for r in C if abs(r["raw"]) > 1e-9 or abs(r["cal"]) > 1e-9]
+    mac("PDN", str(len(C)))
+    mac("PDNLive", str(len(live)))
+    mac("PDFlips", str(sum(r["flip"] for r in live)))
+    mac("PDFlipsSep", str(sum(r["flip"] and sep(r["raw_ci"]) and sep(r["cal_ci"])
+                              for r in live)))
+    shares = [(r["raw"] - r["cal"]) / r["raw"] for r in live]
+    mac("PDShareMed", f"{100 * statistics.median(shares):+.0f}\\%")
+    # Largest share removed, over the cells whose raw margin is separated
+    # from zero. The one excluded cell (max16, tau 16) has raw +0.0010 with an
+    # interval across zero, so its share (46%) is a ratio of noise.
+    solid = [r for r in live if sep(r["raw_ci"])]
+    mac("PDNRawSep", str(len(solid)))
+    mac("PDShareMax", f"{100 * max((r['raw'] - r['cal']) / r['raw'] for r in solid):.0f}\\%")
+    mac("PDMoveMax", f"{max(abs(r['raw'] - r['cal']) for r in live):.3f}")
+    # Biases of both arms between 0.89 and 1.07, compared at two decimals.
+    near = [r for r in live if all(0.89 <= round(x, 2) <= 1.07
+                                   for x in (r["bias_a"], r["bias_b"]))]
+    mac("PDNearOne", str(len(near)))
+    print(f"  prediff: {macros['PDFlips']} flips in {macros['PDNLive']} cells;"
+          f" none {macros['PDNoneRawRel']} -> {macros['PDNoneCalRel']}; "
+          f"max share {macros['PDShareMax']} (of {macros['PDNRawSep']} cells);"
+          f" median {macros['PDShareMed']}; largest move {macros['PDMoveMax']};"
+          f" biases in [0.89, 1.07] in {macros['PDNearOne']}")
+
+
+def transfer():
+    """Held-out test of the six-system line on DiffCast and PreDiff."""
+    d = json.loads((RB / "sevir_transfer_test.json").read_text())
+    f = d["fit"]
+    mac("TTIntercept", f"{f['intercept']:.4f}")
+    mac("TTSlope", f"{f['slope']:.3f}")
+    mac("TTResidSD", f"{f['resid_sd']:.4f}")
+    mac("TTRangeHi", f"{f['range'][1]:.1f}")
+    for key, tag in (("DiffCast", "DC"), ("PreDiff", "PD")):
+        t = next(v for k, v in d["tests"].items() if k.startswith(key))
+        mac(f"TT{tag}N", str(t["n"]))
+        mac(f"TT{tag}Rho", f"{t['rho']:.2f}")
+        mac(f"TT{tag}Sign", f"{100 * t['sign_agree']:.0f}\\%")
+        mac(f"TT{tag}NBig", str(t["n_big"]))
+        mac(f"TT{tag}Inside", f"{100 * t['band_inside']:.0f}\\%")
+        mac(f"TT{tag}NInRange", str(t["n_inside"]))
+        mac(f"TT{tag}NOutRange", str(t["n_outside"]))
+        mac(f"TT{tag}MAE", f"{t['mae']:.3f}")
+        mac(f"TT{tag}MaxG", f"{t['max_abs_g']:.1f}")
+    print(f"  transfer: D = {macros['TTIntercept']} + {macros['TTSlope']} g; "
+          f"PreDiff inside {macros['TTPDInside']}, DiffCast rho "
+          f"{macros['TTDCRho']}, sign {macros['TTDCSign']}, inside "
+          f"{macros['TTDCInside']} of {macros['TTDCNInRange']}")
+
+
+def wb2():
+    """WeatherBench 2, global 24-h precipitation, 2020, against ERA5."""
+    rows = json.loads((RB / "wb2" / "wb2_contrasts.json").read_text())
+    r_, rho = corr([r["devgap"] for r in rows],
+                   [r["raw"] - r["cal"] for r in rows])
+    fl = [r for r in rows if r["flip"]]
+    mac("WBN", str(len(rows)))
+    mac("WBR", f3(r_))
+    mac("WBRho", f3(rho))
+    mac("WBFlips", str(len(fl)))
+    mac("WBFlipsSep", str(sum(sep(r["raw_ci"]) and sep(r["cal_ci"])
+                              for r in fl)))
+    for t, tag in ((1, "One"), (10, "Ten"), (25, "TwentyFive"),
+                   (50, "Fifty")):
+        sub = [r for r in rows if r["threshold_mm"] == t]
+        rr = corr([r["devgap"] for r in sub],
+                  [r["raw"] - r["cal"] for r in sub])[0]
+        mac(f"WBR{tag}", f"{rr:.2f}")
+
+    def cell(a, b, lead, t, pool="none"):
+        return next(r for r in rows if (r["a"], r["b"], r["lead_h"],
+                                        r["threshold_mm"], r["pooling"])
+                    == (a, b, lead, t, pool))
+    r = cell("hres", "fuxi", 72, 50)
+    mac("WBFuxiRaw", s4(r["raw"]))
+    mac("WBFuxiCal", s4(r["cal"]))
+    mac("WBFuxiBias", f"{r['bias_b']:.2f}")
+    mac("WBFuxiHresBias", f"{r['bias_a']:.2f}")
+    r = cell("hres", "graphcast", 72, 50)
+    mac("WBGCRaw", s4(r["raw"]))
+    mac("WBGCCal", s4(r["cal"]))
+    print(f"  wb2: {len(rows)} contrasts, r={macros['WBR']} rho="
+          f"{macros['WBRho']}, {len(fl)} flips ({macros['WBFlipsSep']} "
+          f"separated); FuXi {macros['WBFuxiRaw']} -> {macros['WBFuxiCal']}"
+          f" (B {macros['WBFuxiBias']})")
+
+
+def ecmwf():
+    """ECMWF operational AIFS and IFS forecasts, 2025-26, against ERA5."""
+    rows = json.loads((RB / "aifs" / "aifs_contrasts.json").read_text())
+    ok = [r for r in rows if r["devgap"] is not None]
+    r_, rho = corr([r["devgap"] for r in ok],
+                   [r["csi"]["raw"] - r["csi"]["cal"] for r in ok])
+    fl = [r for r in ok if r["csi"]["flip"]]
+    mac("ECN", str(len(rows)))
+    mac("ECR", f3(r_))
+    mac("ECRho", f3(rho))
+    mac("ECFlips", str(len(fl)))
+    mac("ECFlipsSep", str(sum(r["csi"]["both_separated"] for r in fl)))
+    # The published pair, AIFS Single minus IFS HRES, at 50 mm, no pooling
+    # (the leads 24, 72 and 144 h give the bias ranges).
+    pub = [r for r in rows if r["published"] and r["threshold_mm"] == 50
+           and r["pooling"] == "none"]
+    mac("ECAifsBiasLo", f"{min(r['bias_b'] for r in pub):.2f}")
+    mac("ECAifsBiasHi", f"{max(r['bias_b'] for r in pub):.2f}")
+    mac("ECIfsBiasLo", f"{min(r['bias_a'] for r in pub):.2f}")
+    mac("ECIfsBiasHi", f"{max(r['bias_a'] for r in pub):.2f}")
+    for lead, tag in ((72, "SeventyTwo"), (144, "OneFortyFour")):
+        r = next(x for x in pub if x["lead_h"] == lead
+                 and x["pooling"] == "none")
+        mac(f"ECPss{tag}Raw", s4(r["pss"]["raw"]))
+        mac(f"ECPss{tag}Cal", s4(r["pss"]["cal"]))
+        mac(f"ECCsi{tag}Raw", s4(r["csi"]["raw"]))
+        mac(f"ECCsi{tag}Cal", s4(r["csi"]["cal"]))
+    # Ensemble members at 24 h: here the IFS member over-forecasts.
+    ens = [r for r in rows if (r["a"], r["b"]) == ("ifs_ens_m1", "aifs_ens_m1")
+           and r["lead_h"] == 24 and r["pooling"] == "none"]
+    mac("ECEnsIfsBiasLo", f"{min(r['bias_a'] for r in ens):.2f}")
+    mac("ECEnsIfsBiasHi", f"{max(r['bias_a'] for r in ens):.2f}")
+    mac("ECEnsAifsBiasLo", f"{min(r['bias_b'] for r in ens):.2f}")
+    mac("ECEnsAifsBiasHi", f"{max(r['bias_b'] for r in ens):.2f}")
+    print(f"  ecmwf: {len(rows)} contrasts, r={macros['ECR']} rho="
+          f"{macros['ECRho']}, {len(fl)} flips ({macros['ECFlipsSep']} "
+          f"separated); AIFS PSS 72 h 50 mm {macros['ECPssSeventyTwoRaw']}"
+          f" -> {macros['ECPssSeventyTwoCal']}; biases AIFS "
+          f"{macros['ECAifsBiasLo']}-{macros['ECAifsBiasHi']}, IFS "
+          f"{macros['ECIfsBiasLo']}-{macros['ECIfsBiasHi']}")
+
+
+def crowdpost():
+    """Crowd counting with the map fitted after the patch sum."""
+    s = json.loads((RB / "crowd_postpool.json").read_text())["summary"]
+    mac("CrowdPostRho", f3(s["rho_postpool"]))
+    mac("CrowdPostN", str(s["n_usable"]))
+    # Patch-sum cells only, with no further pooling.
+    mac("CrowdPostRhoSum", f3(s["rho_postpool_none"]))
+    mac("CrowdPostNSum", str(s["n_none"]))
+    print(f"  crowd post-sum: rho={macros['CrowdPostRho']} over "
+          f"{macros['CrowdPostN']} cells; patch sums only "
+          f"{macros['CrowdPostRhoSum']} over {macros['CrowdPostNSum']}")
+
+
+def breadth():
+    """One table: every setting, its contrasts and its reversals.
+
+    Columns: setting, systems, contrasts, reversals (both margins outside
+    their 95% intervals).
+    """
+    rows = [
+        ("Six SEVIR systems, exact control", "6",
+         macros["ExactN"], f"{macros['ExactFlips']} ({macros['ExactSep']})"),
+        ("DiffCast against PhyDNet, SEVIR-128", "2",
+         f"{macros['DCN']} ({macros['DCNLive']} with events)",
+         f"{macros['DCFlips']} ({macros['DCFlipsSep']})"),
+        ("WeatherBench 2, 24-h precipitation, 2020", "5",
+         macros["WBN"], f"{macros['WBFlips']} ({macros['WBFlipsSep']})"),
+        ("ECMWF operational, 2025--26", "4",
+         macros["ECN"], f"{macros['ECFlips']} ({macros['ECFlipsSep']})"),
+        ("PreDiff against persistence, SEVIR-LR", "2",
+         f"{macros['PDN']} ({macros['PDNLive']} with events)",
+         f"{macros['PDFlips']} ({macros['PDFlipsSep']})"),
+    ]
+    (OUT / "tab_breadth.tex").write_text(
+        "\n".join(" & ".join(r) + " \\\\" for r in rows) + "\n")
+
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     for fn in (e1, e6, dose, e8, repro, contrasts, cboot, valfit, valfitboot,
                ets, crowd, crowdpool, segpool, radar, atmos, atmos_allscene,
                rates, boot,
-               lead, knobsevir):
+               lead, knobsevir,
+               # revision additions; breadth() must come last
+               paper_families, exact, diffcast, prediff, transfer, wb2, ecmwf,
+               crowdpost, breadth):
         try:
             fn()
         except Exception as exc:                       # keep the rest usable

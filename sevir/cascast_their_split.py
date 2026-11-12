@@ -8,7 +8,7 @@ windows cut three per event at offsets 0/12/24 from 4053 raw 2019 events, listed
 in `datasets/sevir_list/test.txt`. Their released archive
 (`latent_data/earthformer_example`, named "example" but complete) holds the
 coarse conditioning latent for every one of those 12159 windows, which is what
-their evaluation actually consumes -- it never re-runs the deterministic
+their evaluation actually consumes. It never re-runs the deterministic
 backbone.
 
 So this script removes every remaining degree of freedom between us and their

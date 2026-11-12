@@ -1,0 +1,37 @@
+{
+ "fit": {
+  "intercept": 0.0014801749254604976,
+  "slope": 0.08641716547655921,
+  "resid_sd": 0.01756637845213354,
+  "range": [
+   -1.7421228277136502,
+   1.714784062571361
+  ]
+ },
+ "tests": {
+  "DiffCast (CVPR 2024): DiffCast, PhyDNet backbone, persistence": {
+   "n": 84,
+   "rho": 0.9240052647565051,
+   "sign_agree": 0.9692307692307692,
+   "n_big": 65,
+   "n_inside": 59,
+   "band_inside": 0.8135593220338984,
+   "n_outside": 25,
+   "mae": 0.06406488233766446,
+   "max_abs_g": 4.462256202649107,
+   "max_abs_D": 0.3611794364686553
+  },
+  "PreDiff (NeurIPS 2023) \u2212 persistence": {
+   "n": 29,
+   "rho": 0.6576354679802954,
+   "sign_agree": 1.0,
+   "n_big": 2,
+   "n_inside": 29,
+   "band_inside": 1.0,
+   "n_outside": 0,
+   "mae": 0.003227455337437433,
+   "max_abs_g": 0.31994293467000234,
+   "max_abs_D": 0.019991768018055744
+  }
+ }
+}

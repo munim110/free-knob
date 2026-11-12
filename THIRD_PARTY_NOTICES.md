@@ -4,6 +4,11 @@ This repository evaluates public datasets, libraries, and released
 model checkpoints documented in `README.md` and `REPRODUCE.md`. Those external
 assets are not redistributed here and remain governed by their upstream terms.
 
+The precipitation audits read WeatherBench 2 forecasts, ECMWF open data
+(CC BY 4.0) and ERA5 from public buckets. No forecast or reanalysis field is
+redistributed. `results/revision/` holds only contingency counts and scores
+derived from them.
+
 `common/models/rainnet.py` is a PyTorch implementation based on the public
 RainNet architecture by Georgy Ayzel. The upstream RainNet repository is
 distributed under the MIT License; its license text is included at
